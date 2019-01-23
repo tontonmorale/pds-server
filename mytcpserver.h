@@ -17,6 +17,7 @@
 #include "person.h"
 #include "functions.h"
 #include "window.h"
+#include "esp.h"
 
 class MyTcpServer : public QObject
 {
@@ -51,6 +52,7 @@ private:
     QMap<QString, QSharedPointer<Packet>> packetsMap;
     QMap<QString, int> areaPacketsMap;
     QMap<QString, Person> peopleMap;
+    QList<Esp> *espList;
     QList<QPointF> peopleCounter;
     void updatePacketsSet(Person &p, QString shortKey);
 };

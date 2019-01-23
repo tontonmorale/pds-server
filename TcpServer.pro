@@ -10,6 +10,8 @@ TARGET = TcpServer
 CONFIG   += console
 CONFIG   -= app_bundle
 
+DISTFILES += esp.txt
+
 
 TEMPLATE = app
 
@@ -20,7 +22,8 @@ SOURCES += main.cpp \
     person.cpp \
     point.cpp \
     functions.cpp \
-    window.cpp
+    window.cpp \
+    esp.cpp
 
 HEADERS += \
     mytcpserver.h \
@@ -28,7 +31,8 @@ HEADERS += \
     person.h \
     point.h \
     functions.h \
-    window.h
+    window.h \
+    esp.h
 
     mytcpserver.cpp
 

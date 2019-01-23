@@ -5,36 +5,46 @@
 #include "stdio.h"
 #include <iostream>
 
-#define MAX_CLIENTS 3
+#define MAX_CLIENTS 2
 #define MAX_MINUTES 5
 #define PORT 9999
 #define TIME_SLOT 5
+#define CHARS_TO_READ 32
+
 using namespace std;
 
 MyTcpServer::MyTcpServer(QObject *parent) :
     QObject(parent)
 {
-    this->server = new QTcpServer(this);
-    this->connectedClients = 0;
-    this->receivedPacketsFiles = 0;
-    this->currMinute = 0;
-    this->currTimeSlot = 0;
+//    this->espList = confFromFile();
 
-    QPointF point = QPointF(0, 0);
-    this->peopleCounter.append(point);
-    //this->peopleMap = new QMap<QString, QSet<Packet>>();
+    this->server = new QTcpServer(this);
+
 
     serverInit();
+
     this->window.show();
 }
 
 bool MyTcpServer::serverInit(){
     int i=0;
 
+    this->connectedClients = 0;
+    this->receivedPacketsFiles = 0;
+    this->currMinute = 0;
+    this->currTimeSlot = 0;
+
+    QPointF point = QPointF(0, 0);
+    this->peopleCounter.clear();
+    this->peopleCounter.append(point);
+
+    //read esp configuration from file
+    this->espList=confFromFile();
+
     // signal for new client connection
     connect(server, SIGNAL(newConnection()), this, SLOT(onClientConnection()));
 
-    //start listenint to incoming connections
+    //start listening to incoming connections
     for(i=0; i<3; i++)
         if(serverListen(server, PORT))
             break;
@@ -59,8 +69,8 @@ bool MyTcpServer::serverListen(QTcpServer *server, quint16 port){
     }
 
     else {
-        qDebug().noquote() << "Server started\n";
-        qDebug() << "Waiting for connections ...";
+        qDebug().noquote() << "SERVER STARTED\n";
+        qDebug() << "Waiting for connections ...\n\n";
         flag = true;
     }
 
@@ -71,45 +81,54 @@ void MyTcpServer::onClientConnection() {
 
     QTcpSocket *socket = server->nextPendingConnection();
 
-    QString clientId, welcomeMsg;
+    QString clientId, hello2Client, mac, helloFromClient;
     const char* msg;
 
-//    qDebug().noquote() << socket->state();
-//    char stringa[10];
-
-
-
     connect(socket, SIGNAL(stateChanged(QAbstractSocket::SocketState)), this, SLOT(onClientDisconnection(QAbstractSocket::SocketState)));
-//    connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error), this, &MyTcpServer::onClientDisconnection);
-//    connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
-//        [=](QAbstractSocket::SocketError socketError){
-//        qDebug().noquote() << "segnale di errore ricevuto";
-//    });
-    connect(socket, SIGNAL(readyRead()), this, SLOT(readFromClient()));
 
     this->socketList.append(socket);
     this->connectedClients++;
 
-//    while(1){
-//        cin >> stringa ;
-//        qDebug().noquote() << (*(this->socketList.begin()))->state();
-//    }
+    qDebug().noquote() << "NEW CONNECTION\nClient number: " + QString::number(this->connectedClients);
 
-    qDebug().noquote() << "New connection from client " + QString::number(this->connectedClients) + "\n";
+    QStringList sl;
+    QString line;
 
     //new client, send hello and esp id
     clientId = QString("%1").arg(connectedClients, 2, 10, QChar('0'));
-    welcomeMsg = "CIAO " + clientId + "\r\n";
-    qDebug().noquote() << "welcomeMsg: " + welcomeMsg;
-    msg = welcomeMsg.toStdString().c_str();
-    qDebug() << msg;
+    hello2Client = "CIAO " + clientId;
+    qDebug().noquote() << "Message to client: " + hello2Client;
+    hello2Client = hello2Client + "\r\n";
+    msg = hello2Client.toStdString().c_str();
     socket->write(msg);
+    socket->waitForReadyRead();
+    helloFromClient = QString(socket->readLine());
+
+    //connect slot for reading from clients
+    connect(socket, SIGNAL(readyRead()), this, SLOT(readFromClient()));
+
+
+    helloFromClient.remove('\r');
+    helloFromClient.remove('\n');
+    qDebug().noquote() << "Received from client: " << helloFromClient;
+    mac = QString(helloFromClient).split(" ").at(3);
+    qDebug().noquote() << "Client mac: " << mac + "\n";
+
+    //setta socket dell' oggetto esp
+    QList<Esp>::iterator i;
+    for(i=this->espList->begin(); i!=this->espList->end(); i++){
+        if(mac.compare(i->getMac())==0)
+            i->setSocket(socket);
+    }
+
+
 
     //all clients connected, send start
     if(this->connectedClients >= MAX_CLIENTS){
         this->currMinute=1;
         startToClients();
     }
+
 }
 
 void MyTcpServer::startToClients(){
@@ -126,7 +145,8 @@ void MyTcpServer::onClientDisconnection(QAbstractSocket::SocketState sockError) 
     if (i!=-1)
         this->socketList.removeAt(i);
 
-    qDebug().noquote() << "Client number " + QString::number(this->connectedClients) + " disconnected";
+//    qDebug().noquote() << "Client number " + QString::number(this->connectedClients) + " disconnected";
+    qDebug().noquote() << "Client changed state";
 
     this->connectedClients--;
 
@@ -257,48 +277,57 @@ void MyTcpServer::readFromClient(){
 
 
                 //if last minute
-                if(this->currMinute >= MAX_MINUTES){                    
-
-                    //calculate positions of people in area
+                if(this->currMinute >= MAX_MINUTES){
                     QList<QPointF> points;
-                    QMap<QString, Person>::iterator pm;
-                    for(pm=this->peopleMap.begin(); pm!=this->peopleMap.end(); pm++){
-                        qDebug().noquote() << "Mac: " + pm.key();
-                        qDebug().noquote() << " con i seguenti pacchetti:\n";
 
-                        QSet<QSharedPointer<Packet>> ps = pm.value().getPacketsSet();
+                    //calcolo posizione dispositivi solo se almeno 3 client connessi
+                    if(MAX_CLIENTS>=3){
 
-                        double d1, d2, d3;
+                        //calculate positions of people in area
+                        QMap<QString, Person>::iterator pm;
+                        for(pm=this->peopleMap.begin(); pm!=this->peopleMap.end(); pm++){
+                            qDebug().noquote() << "Mac: " + pm.key();
+                            qDebug().noquote() << " con i seguenti pacchetti:\n";
 
-                        //corrispondenza tra un certo esp e la sua potenza
-                        for (QSet<QSharedPointer<Packet>>::iterator i = ps.begin(); i != ps.end(); i++) {
-                            if ((*i)->getEsp().compare("01")==0){
-//                                d1 = dbToMeters((*i)->getSignal());
-                                d1 = calculateDistance((*i)->getSignal());
-//                                if((*i)->getMac().compare("30:74:96:94:e3:2d")==0)
-                                    qDebug().noquote() << QString::number(d1) + " " + QString::number((*i)->getSignal()) + "\n";
+                            QSet<QSharedPointer<Packet>> ps = pm.value().getPacketsSet();
+
+                            double d1, d2, d3;
+
+                            //corrispondenza tra un certo esp e la sua potenza
+                            for (QSet<QSharedPointer<Packet>>::iterator i = ps.begin(); i != ps.end(); i++) {
+                                if ((*i)->getEsp().compare("01")==0){
+                                    d1 = dbToMeters((*i)->getSignal());
+    //                                d1 = calculateDistance((*i)->getSignal());
+                                    if((*i)->getMac().compare("30:74:96:94:e3:2d")==0)
+                                        qDebug().noquote() << QString::number(d1) + " " + QString::number((*i)->getSignal()) + "\n";
+                                }
+                                else if ((*i)->getEsp().compare("02")==0){
+                                    d2 = dbToMeters((*i)->getSignal());
+    //                                d2 = calculateDistance((*i)->getSignal());
+                                    if((*i)->getMac().compare("30:74:96:94:e3:2d")==0)
+                                        qDebug().noquote() << QString::number(d2) + " " + QString::number((*i)->getSignal()) + "\n";
+                                }
+                                else if ((*i)->getEsp().compare("03")==0){
+                                    d3 = dbToMeters((*i)->getSignal());
+    //                                d3 = calculateDistance((*i)->getSignal());
+                                    if((*i)->getMac().compare("30:74:96:94:e3:2d")==0)
+                                        qDebug().noquote() << QString::number(d3) + " " + QString::number((*i)->getSignal()) + "\n";
+                                }
+                                qDebug().noquote() << (*i)->getHash() + "\n";
+
                             }
-                            else if ((*i)->getEsp().compare("02")==0){
-//                                d2 = dbToMeters((*i)->getSignal());
-                                d2 = calculateDistance((*i)->getSignal());
-//                                if((*i)->getMac().compare("30:74:96:94:e3:2d")==0)
-                                    qDebug().noquote() << QString::number(d2) + " " + QString::number((*i)->getSignal()) + "\n";
-                            }
-                            else if ((*i)->getEsp().compare("03")==0){
-//                                d3 = dbToMeters((*i)->getSignal());
-                                d3 = calculateDistance((*i)->getSignal());
-//                                if((*i)->getMac().compare("30:74:96:94:e3:2d")==0)
-                                    qDebug().noquote() << QString::number(d3) + " " + QString::number((*i)->getSignal()) + "\n";
-                            }
-                            qDebug().noquote() << (*i)->getHash() + "\n";
 
+                            QPointF esp1, esp2, esp3;
+                            esp1 = (*espList)[0].getPoint();
+                            esp2 = (*espList)[1].getPoint();
+                            esp3 = (*espList)[2].getPoint();
+                            Point res = trilateration(d1, d2, d3, esp1, esp2, esp3);
+                            QPointF point = QPointF(res.getX(), res.getY());
+                            points.append(point);
                         }
-                        Point res = trilateration(d1, d2, d3);
-                        QPointF point = QPointF(res.getX(), res.getY());
-                        points.append(point);
                     }
 
-                    //conta le persone nell'area e fai grafichino bello
+                    //conta le persone nell'area e disegna grafico
                     this->currTimeSlot ++;
                     QPointF point = QPointF(this->currTimeSlot * TIME_SLOT, peopleMap.size());
                     this->peopleCounter.append(point);
