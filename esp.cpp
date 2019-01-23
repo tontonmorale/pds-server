@@ -17,6 +17,10 @@ QString Esp::getMac(){
     return this->mac;
 }
 
+QTcpSocket* Esp::getSocket(){
+    return this->socket;
+}
+
 void Esp::setSocket(QTcpSocket *socket){
     this->socket = socket;
 }

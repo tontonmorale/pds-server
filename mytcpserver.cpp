@@ -5,8 +5,9 @@
 #include "stdio.h"
 #include <iostream>
 
-#define MAX_CLIENTS 2
+#define MAX_CLIENTS 3
 #define MAX_MINUTES 5
+#define MAX_WAIT 15000
 #define PORT 9999
 #define TIME_SLOT 5
 #define CHARS_TO_READ 32
@@ -35,7 +36,6 @@ bool MyTcpServer::serverInit(){
     this->currTimeSlot = 0;
 
     QPointF point = QPointF(0, 0);
-    this->peopleCounter.clear();
     this->peopleCounter.append(point);
 
     //read esp configuration from file
@@ -45,9 +45,12 @@ bool MyTcpServer::serverInit(){
     connect(server, SIGNAL(newConnection()), this, SLOT(onClientConnection()));
 
     //start listening to incoming connections
-    for(i=0; i<3; i++)
-        if(serverListen(server, PORT))
-            break;
+    if(!server->isListening()){
+        for(i=0; i<3; i++){
+            if(serverListen(server, PORT))
+                break;
+        }
+    }
     if(i==3)
         return false;
 
@@ -84,9 +87,9 @@ void MyTcpServer::onClientConnection() {
     QString clientId, hello2Client, mac, helloFromClient;
     const char* msg;
 
-    connect(socket, SIGNAL(stateChanged(QAbstractSocket::SocketState)), this, SLOT(onClientDisconnection(QAbstractSocket::SocketState)));
-
-    this->socketList.append(socket);
+    QTimer *timer = new QTimer(this);
+    connect(timer, SIGNAL(timeout()), this, SLOT(onClientDisconnection()));
+    this->socketTimerMap[socket]=timer;
     this->connectedClients++;
 
     qDebug().noquote() << "NEW CONNECTION\nClient number: " + QString::number(this->connectedClients);
@@ -132,25 +135,60 @@ void MyTcpServer::onClientConnection() {
 }
 
 void MyTcpServer::startToClients(){
-    for (QTcpSocket *s : this->socketList) {
+    for (QTcpSocket *s : this->socketTimerMap.keys()) {
         qDebug().noquote() << "invio start";
         s->write("START\r\n");
+        socketTimerMap[s]->start(MAX_WAIT+5000);
     }
 }
 
-void MyTcpServer::onClientDisconnection(QAbstractSocket::SocketState sockError) {
-    QTcpSocket *socket = qobject_cast<QTcpSocket *>(QObject::sender());
-
-    int i = this->socketList.indexOf(socket);
-    if (i!=-1)
-        this->socketList.removeAt(i);
-
-//    qDebug().noquote() << "Client number " + QString::number(this->connectedClients) + " disconnected";
-    qDebug().noquote() << "Client changed state";
+void MyTcpServer::onClientDisconnection() {
+    QTimer* t = qobject_cast<QTimer*>(sender());
+    qDebug().noquote() << "Client number " + QString::number(this->connectedClients) + " disconnected";
+    QTcpSocket *s = socketTimerMap.key(t);
+    s->deleteLater();
+    socketTimerMap.key(t)->deleteLater();
+//    socketTimerMap.remove(s);
 
     this->connectedClients--;
+    if (this->connectedClients < 2) {
+        //ferma tutto, cancella strutture e aspetta che ci siano almeno 3 esp e ricomincia
+        for(QMap<QTcpSocket*, QTimer*>::iterator i=socketTimerMap.begin(); i!=socketTimerMap.end(); i++){
+//            i.value()->deleteLater();
+            i.key()->deleteLater();
+        }
+//        for(QMap<QString, QSharedPointer<Packet>>::iterator i=packetsMap.begin(); i!=packetsMap.end(); i++){
+//            i.value()->deleteLater();
+//        }
 
-    socket->deleteLater();
+//        for(QMap<QString, int>::iterator i=areaPacketsMap.begin(); i!=areaPacketsMap.end(); i++){
+//            (i.value()).deleteLater();
+//        }
+//        areaPacketsMap.clear();
+
+//        peopleMap.clear();
+//        peopleCounter.clear();
+
+//        qDeleteAll(packetsMap);
+//        qDeleteAll(areaPacketsMap);
+//        qDeleteAll(peopleMap);
+//        qDeleteAll(peopleCounter);
+        serverInit();
+    }
+    else {
+        //vai avanti dicendo alla funzione di disegno dei punti sulla mappa chi si è disconnesso ed adatta la situazione
+        //vedi quali ESP sono usati per disegnare la mappa, se quello che si è disconnesso era una di quelli allora cambialo con
+        //quello rimasto (o il primo valido), altrimenti vai avanti
+//        foreach(Esp e, espList){
+//            if(e.getSocket()==s)
+//                espList->removeOne(e);
+//        }
+        for(QList<Esp>::iterator i=espList->begin(); i!=espList->end(); i++)
+            if((i->getSocket()->socketDescriptor())==(s->socketDescriptor()))
+//                espList->removeOne(*i);
+                espList->erase(i);
+
+    }
 }
 
 bool MyTcpServer::dbConnect() {
@@ -176,6 +214,8 @@ void MyTcpServer::readFromClient(){
     Packet* pkt;// = new Packet();
     QStringList sl, tsSplit, macList;
     Packet p;
+
+    socketTimerMap[conn]->start(MAX_WAIT+5000);
 
     while ( conn->canReadLine() ) {
         line = QString(conn->readLine());
@@ -282,6 +322,10 @@ void MyTcpServer::readFromClient(){
 
                     //calcolo posizione dispositivi solo se almeno 3 client connessi
                     if(MAX_CLIENTS>=3){
+                        QPointF esp1, esp2, esp3;
+                        esp1 = (*espList)[0].getPoint();
+                        esp2 = (*espList)[1].getPoint();
+                        esp3 = (*espList)[2].getPoint();
 
                         //calculate positions of people in area
                         QMap<QString, Person>::iterator pm;
@@ -317,10 +361,7 @@ void MyTcpServer::readFromClient(){
 
                             }
 
-                            QPointF esp1, esp2, esp3;
-                            esp1 = (*espList)[0].getPoint();
-                            esp2 = (*espList)[1].getPoint();
-                            esp3 = (*espList)[2].getPoint();
+
                             Point res = trilateration(d1, d2, d3, esp1, esp2, esp3);
                             QPointF point = QPointF(res.getX(), res.getY());
                             points.append(point);

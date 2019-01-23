@@ -35,7 +35,7 @@ signals:
 
 public slots:
     void onClientConnection();
-    void onClientDisconnection(QAbstractSocket::SocketState sockError);
+    void onClientDisconnection();
     void readFromClient();
 
 
@@ -54,6 +54,7 @@ private:
     QMap<QString, Person> peopleMap;
     QList<Esp> *espList;
     QList<QPointF> peopleCounter;
+    QMap<QTcpSocket*, QTimer*> socketTimerMap;
     void updatePacketsSet(Person &p, QString shortKey);
 };
 
