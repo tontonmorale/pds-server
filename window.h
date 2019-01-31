@@ -53,7 +53,6 @@
 
 #include <QWidget>
 #include <QtCharts/QScatterSeries>
-#include "functions.h"
 #include <QGridLayout>
 
 QT_BEGIN_NAMESPACE
@@ -66,15 +65,18 @@ class Window : public QWidget
     Q_OBJECT
 
 public:
-    Window(QWidget *parent = 0);
+    Window();
+    Window(QPointF max);
     void updateMapChart();
     QGridLayout *getGrid();
     QGroupBox *createTimeChartGroup(QList<QPointF> points);
-    QGroupBox *createMapChartGroup(QList<QPointF> points);
-    void setWidget(QString string, QList<QPointF> list);
+    QGroupBox *createMapChartGroup(QList<QPointF> points, QPointF max);
+    void setWidget(QString string, QList<QPointF> list, QPointF max);
+
 
 private:
     QGridLayout *grid;
+
 };
 //! [0]
 

@@ -9,29 +9,30 @@
 
 QT_CHARTS_USE_NAMESPACE
 
-Window::Window(QWidget *parent)
-    : QWidget(parent)
+Window::Window(){}
+
+Window::Window(QPointF max)
 {
     QList<QPointF> mapList;
     QList<QPointF> timeList;
     this->grid = new QGridLayout;
 
     grid->addWidget(createTimeChartGroup(timeList), 0, 0);
-    grid->addWidget(createMapChartGroup(mapList), 0, 1);
+    grid->addWidget(createMapChartGroup(mapList, max), 0, 1);
     setLayout(grid);
 
     setWindowTitle(tr("Spot your mate"));
     resize(1000, 600);
 }
 
-void Window::setWidget(QString string, QList<QPointF> list){
+void Window::setWidget(QString string, QList<QPointF> list, QPointF max){
     if(string.compare("time")==0) {
         //grid->removeWidget();
         grid->addWidget(createTimeChartGroup(list), 0, 0);
     }
 
     if(string.compare("map")==0)
-        grid->addWidget(createMapChartGroup(list), 0, 1);
+        grid->addWidget(createMapChartGroup(list, max), 0, 1);
     setLayout(grid);
 }
 
@@ -69,7 +70,7 @@ QGroupBox *Window::createTimeChartGroup(QList<QPointF> points)
     return groupBox;
 }
 
-QGroupBox *Window::createMapChartGroup(QList<QPointF> points)
+QGroupBox *Window::createMapChartGroup(QList<QPointF> points, QPointF max)
 {
     QGroupBox *groupBox = new QGroupBox(tr("Map"));
 
@@ -82,8 +83,8 @@ QGroupBox *Window::createMapChartGroup(QList<QPointF> points)
     chart->legend()->hide();
     chart->addSeries(series);
     chart->createDefaultAxes();
-    chart->axisX()->setRange(0.0, esp2x);
-    chart->axisY()->setRange(0.0, esp3y);
+    chart->axisX()->setRange(0.0, max);
+    chart->axisY()->setRange(0.0, max);
     chart->setTitle("People in the area");
 
     QChartView *chartView = new QChartView(chart);

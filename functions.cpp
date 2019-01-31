@@ -41,6 +41,21 @@ Point trilateration(double r1, double r2, double r3, QPointF esp1, QPointF esp2,
     return resultPose;
 }
 
+QPointF setCoordinates(QList<Esp> *p) {
+    double x_max = 0, y_max = 0;
+    QPointF point;
+    for(QList<Esp>::iterator i=p->begin(); i!=p->end(); i++) {
+        if (i->getPoint().x()> x_max)
+            x_max = i->getPoint().x();
+        if (i->getPoint().y()> y_max)
+            y_max = i->getPoint().y();
+    }
+    point.setX(x_max);
+    point.setY(y_max);
+
+    return point;
+}
+
 double dbToMeters(int signal){
     double d;
     double n = 1;

@@ -40,7 +40,7 @@ public slots:
 
 
 private:
-    Window window;
+    Window* window;
     QTcpServer *server;
     QList<QTcpSocket *> socketList;
     int connectedClients;
@@ -56,6 +56,7 @@ private:
     QList<QPointF> peopleCounter;
     QMap<QTcpSocket*, QTimer*> socketTimerMap;
     void updatePacketsSet(Person &p, QString shortKey);
+    QPointF max;
 };
 
 #endif // MYTCPSERVER_H

@@ -4,6 +4,7 @@
 #include "esp.h"
 #include <QList>
 #include <QPointF>
+#include "window.h"
 
 //#define esp1x 0.0
 //#define esp1y 0.0
@@ -24,4 +25,5 @@ Point trilateration(double r1, double r2, double r3, QPointF esp1, QPointF esp2,
 double dbToMeters(int signal);
 double calculateDistance(int rssi);
 QList<Esp>* confFromFile();
+QPointF setCoordinates(QList<Esp> *p);
 #endif // FUNCTIONS_H

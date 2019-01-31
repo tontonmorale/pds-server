@@ -5,7 +5,7 @@
 #include "stdio.h"
 #include <iostream>
 
-#define MAX_CLIENTS 3
+#define MAX_CLIENTS 1
 #define MAX_MINUTES 5
 #define MAX_WAIT 15000
 #define PORT 9999
@@ -17,14 +17,15 @@ using namespace std;
 MyTcpServer::MyTcpServer(QObject *parent) :
     QObject(parent)
 {
-//    this->espList = confFromFile();
+    this->espList = confFromFile();
+    this->max = setCoordinates(espList);
 
     this->server = new QTcpServer(this);
 
-
     serverInit();
 
-    this->window.show();
+    this->window = new Window(max);
+    this->window->show();
 }
 
 bool MyTcpServer::serverInit(){
@@ -59,14 +60,14 @@ bool MyTcpServer::serverInit(){
 
 bool MyTcpServer::serverListen(QTcpServer *server, quint16 port){
     bool flag;
-    QHostAddress ip = getLocalIp();
+//    QHostAddress ip = getLocalIp();
 
-    if(ip == QHostAddress::Null){
-        qDebug().noquote() << "Cannot get local ip address\n";
-        flag = false;
-    }
+//    if(ip == QHostAddress::Null){
+//        qDebug().noquote() << "Cannot get local ip address\n";
+//        flag = false;
+//    }
 
-    if(!server->listen(ip, port)){
+    if(!server->listen(QHostAddress("192.168.43.172"), 9999)){
         qDebug().noquote() << "Error on listen, server could not start\n";
         flag = false;
     }
@@ -138,7 +139,7 @@ void MyTcpServer::startToClients(){
     for (QTcpSocket *s : this->socketTimerMap.keys()) {
         qDebug().noquote() << "invio start";
         s->write("START\r\n");
-        socketTimerMap[s]->start(MAX_WAIT+5000);
+//        socketTimerMap[s]->start(MAX_WAIT+16000);
     }
 }
 
@@ -211,18 +212,17 @@ bool MyTcpServer::dbConnect() {
 void MyTcpServer::readFromClient(){
     QTcpSocket* conn = qobject_cast<QTcpSocket*>(sender());
     QString line, firstWord, hash, timestamp, mac, signal, microsec_str, esp, ssid;
-    Packet* pkt;// = new Packet();
+    Packet* pkt;
     QStringList sl, tsSplit, macList;
     Packet p;
 
-    socketTimerMap[conn]->start(MAX_WAIT+5000);
+//    socketTimerMap[conn]->start(MAX_WAIT+16000);
 
     while ( conn->canReadLine() ) {
         line = QString(conn->readLine());
         line.remove('\n');
         qDebug().noquote() << line + "\n";
 
-//        cout << tr("ciao");
         firstWord = line.split(" ").at(0);
 
         //received new packet
@@ -248,23 +248,20 @@ void MyTcpServer::readFromClient(){
             QString key = hash + "-" + mac + "-" + esp;
             QString shortKey = hash + "-" + mac;
 
-            //insert new packet if in first minute or person in the area in previous minutes
-//            if(this->currMinute==1 || (this->currMinute!=1 && this->peopleMap.find(mac)!=this->peopleMap.end())){
-            if(1){
-                if(this->packetsMap.find(key) == this->packetsMap.end()){
-                    //insert new packet
-                    pkt = new Packet(hash, mac, timestamp, signal, esp, "ssid");
-                    this->packetsMap[key] = QSharedPointer<Packet>(pkt);
 
-                    //update area packet count
-                    if(this->areaPacketsMap.find(shortKey) != this->areaPacketsMap.end()){
-                        this->areaPacketsMap[shortKey] ++;
-                    }
-                    else{
-                        this->areaPacketsMap[shortKey] = 1;
-                    }
+//            if(this->packetsMap.find(key) == this->packetsMap.end()){
+                //insert new packet
+                pkt = new Packet(hash, mac, timestamp, signal, esp, "ssid");
+                this->packetsMap[key] = QSharedPointer<Packet>(pkt);
+
+                //update area packet count
+                if(this->areaPacketsMap.find(shortKey) != this->areaPacketsMap.end()){
+                    this->areaPacketsMap[shortKey] ++;
                 }
-            }
+                else{
+                    this->areaPacketsMap[shortKey] = 1;
+                }
+//            }
         }
 
         //received all packets
@@ -301,31 +298,26 @@ void MyTcpServer::readFromClient(){
                     }
                 }
 
-
-
-                //delete people with minutesCount != current minute
-//                QMap<QString, Person>::iterator pm;
-//                for(pm=this->peopleMap.begin(); pm!=this->peopleMap.end(); ){
-//                    if(pm.value().getMinCount() != this->currMinute)
-//                       pm = this->peopleMap.erase(pm);
-//                    else
-//                        pm++;
-//                }
-
                 qDebug().noquote() << "Fine minuto: " + QString::number(this->currMinute) + "\n";
                 qDebug().noquote() << "-------------\n\n";
 
 
                 //if last minute
-                if(this->currMinute >= MAX_MINUTES){
-                    QList<QPointF> points;
+                QList<QPointF> points;
+                if(this->currMinute >= MAX_MINUTES)
+                {
 
                     //calcolo posizione dispositivi solo se almeno 3 client connessi
-                    if(MAX_CLIENTS>=3){
-                        QPointF esp1, esp2, esp3;
-                        esp1 = (*espList)[0].getPoint();
-                        esp2 = (*espList)[1].getPoint();
-                        esp3 = (*espList)[2].getPoint();
+                    if(MAX_CLIENTS>=3)
+                    {
+                        QPointF pA, pB, pC;
+                        Esp espA, espB, espC;
+                        espA = (*espList)[0];
+                        espB = (*espList)[1];
+                        espC = (*espList)[2];
+                        pA = espA.getPoint();
+                        pB = espB.getPoint();
+                        pC = espC.getPoint();
 
                         //calculate positions of people in area
                         QMap<QString, Person>::iterator pm;
@@ -339,19 +331,19 @@ void MyTcpServer::readFromClient(){
 
                             //corrispondenza tra un certo esp e la sua potenza
                             for (QSet<QSharedPointer<Packet>>::iterator i = ps.begin(); i != ps.end(); i++) {
-                                if ((*i)->getEsp().compare("01")==0){
+                                if ((*i)->getEsp().compare(espA.getName())==0){
                                     d1 = dbToMeters((*i)->getSignal());
     //                                d1 = calculateDistance((*i)->getSignal());
                                     if((*i)->getMac().compare("30:74:96:94:e3:2d")==0)
                                         qDebug().noquote() << QString::number(d1) + " " + QString::number((*i)->getSignal()) + "\n";
                                 }
-                                else if ((*i)->getEsp().compare("02")==0){
+                                else if ((*i)->getEsp().compare(espB.getName())==0){
                                     d2 = dbToMeters((*i)->getSignal());
     //                                d2 = calculateDistance((*i)->getSignal());
                                     if((*i)->getMac().compare("30:74:96:94:e3:2d")==0)
                                         qDebug().noquote() << QString::number(d2) + " " + QString::number((*i)->getSignal()) + "\n";
                                 }
-                                else if ((*i)->getEsp().compare("03")==0){
+                                else if ((*i)->getEsp().compare(espC.getName())==0){
                                     d3 = dbToMeters((*i)->getSignal());
     //                                d3 = calculateDistance((*i)->getSignal());
                                     if((*i)->getMac().compare("30:74:96:94:e3:2d")==0)
@@ -362,19 +354,21 @@ void MyTcpServer::readFromClient(){
                             }
 
 
-                            Point res = trilateration(d1, d2, d3, esp1, esp2, esp3);
+                            Point res = trilateration(d1, d2, d3, pA, pB, pC);
                             QPointF point = QPointF(res.getX(), res.getY());
-                            points.append(point);
+                            if ((point.x()>=0 && point.y()>=0) && (point.x()<=max.x() && point.y()<=max.y()))
+                                    points.append(point);
+                            }
                         }
-                    }
 
                     //conta le persone nell'area e disegna grafico
                     this->currTimeSlot ++;
                     QPointF point = QPointF(this->currTimeSlot * TIME_SLOT, peopleMap.size());
                     this->peopleCounter.append(point);
-                    this->window.setWidget("time", peopleCounter);
+                    this->window->setWidget("time", peopleCounter, max);
                     //disegna persone nella mappa
-                    this->window.setWidget("map", points);
+                    this->window->setWidget("map", points, max);
+                    this->window->show();
 
                     if(this->currTimeSlot>=12){
                         this->currTimeSlot = 0;
@@ -384,7 +378,7 @@ void MyTcpServer::readFromClient(){
                     }
 
                     //delete previous packets
-                    this->peopleMap.clear();                    
+                    this->peopleMap.clear();
 
                     this->currMinute = 0;
                     //send start to clients
@@ -393,6 +387,7 @@ void MyTcpServer::readFromClient(){
                     //...todo
                     //...todo
                 }
+
                 this->currMinute++;
                 this->packetsMap.clear();
                 this->areaPacketsMap.clear();
@@ -422,7 +417,6 @@ void MyTcpServer::readFromClient(){
 //           qDebug() << "Query3 andata a buon fine";
 //       else
 //           qDebug() << "Query3 fallita";
-
 
     }
 }

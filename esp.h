@@ -14,6 +14,7 @@ public:
     void setSocket(QTcpSocket *socket);
     QTcpSocket *getSocket();
     QPointF getPoint();
+    QString getName();
 
 
 private:
