@@ -18,7 +18,7 @@ public:
 
 
 private:
-    QString name;
+    QString id;
     QString mac;
     QPointF point;
     QTcpSocket *socket;

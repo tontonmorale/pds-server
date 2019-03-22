@@ -5,9 +5,9 @@ Esp::Esp()
 
 }
 
-Esp::Esp(QString name, QString mac, QPointF p)
+Esp::Esp(QString id, QString mac, QPointF p)
 {
-    this->name = name;
+    this->id = id;
     this->mac = mac;
     this->point = p;
 
@@ -17,8 +17,8 @@ QString Esp::getMac(){
     return this->mac;
 }
 
-QString Esp::getName(){
-    return this->name;
+QString Esp::getId(){
+    return this->id;
 }
 
 QTcpSocket* Esp::getSocket(){
